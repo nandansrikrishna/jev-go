@@ -1,0 +1,9 @@
+bin/
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+jev-demo/
+results*.jsonl
+.env
+.env.*

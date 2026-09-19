@@ -1,0 +1,20 @@
+{
+  "issue": {
+    "type": "choice",
+    "instructions": "What is the primary issue reported by this support ticket?",
+    "criteria": {
+      "login": "Unable to log in or maintain a session",
+      "billing": "Payments, charges, or subscriptions",
+      "other": "Another issue or a general question"
+    }
+  },
+  "urgency": {
+    "type": "score",
+    "instructions": "How urgent is the reported impact?",
+    "criteria": ["No immediate impact", "Work impaired but workaround exists", "Work completely blocked with no workaround"]
+  },
+  "bug_relevance": {
+    "type": "noul",
+    "instructions": "Does this ticket report being repeatedly logged out immediately after successfully signing in?"
+  }
+}
