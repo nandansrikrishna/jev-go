@@ -90,7 +90,7 @@ func pack(files map[string][]byte, binary string, windows bool) ([]byte, error) 
 			if name == binary {
 				header.SetMode(0755)
 			}
-			header.SetModTime(time.Unix(0, 0).UTC())
+			header.SetModTime(time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC))
 			entry, err := writer.CreateHeader(header)
 			if err != nil {
 				return nil, err
