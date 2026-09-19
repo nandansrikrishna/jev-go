@@ -13,12 +13,12 @@ func apiKey() (string, error) {
 		var err error
 		key, err = loadKey()
 		if err != nil {
-			return "", errInput
+			return "", invalid("missing_credentials", "No API key found; set TYPESAFE_API_KEY or run jev auth")
 		}
 		key = strings.TrimSpace(key)
 	}
 	if !validKey(key) {
-		return "", errInput
+		return "", invalid("invalid_credentials", "API key must be nonempty and contain no whitespace")
 	}
 	return key, nil
 }

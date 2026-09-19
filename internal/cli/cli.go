@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -16,7 +17,7 @@ import (
 	"golang.org/x/term"
 )
 
-const Version = "0.1.0-beta.1"
+const Version = "0.1.0-beta.2"
 
 //go:embed assets/*
 var assets embed.FS
@@ -47,7 +48,22 @@ func Run(ctx context.Context, args []string, in io.Reader, out, diag io.Writer) 
 		return 130
 	}
 	if err != nil {
-		_ = emit(diag, object{"error": object{"type": "ValueError", "message": "Invalid configuration or input; check files, question schema, IDs, and credentials"}})
+		detail := object{"type": "ValueError", "code": "invalid_input", "message": "Invalid configuration or input"}
+		var input *inputError
+		if errors.As(err, &input) {
+			detail["code"] = input.Code
+			detail["message"] = input.Message
+			if input.Field != "" {
+				detail["field"] = input.Field
+			}
+			if input.Path != "" {
+				detail["path"] = input.Path
+			}
+			if input.Line > 0 {
+				detail["line"] = input.Line
+			}
+		}
+		_ = emit(diag, object{"error": detail})
 		return 2
 	}
 	return code
@@ -86,7 +102,7 @@ func run(ctx context.Context, args []string, in io.Reader, out, diag io.Writer) 
 			fs.BoolVar(&resume, "resume", false, "Append and skip successful identical requests")
 		}
 	default:
-		return 2, errInput
+		return 2, invalid("unknown_command", "Unknown command; run jev --help")
 	}
 	if e := fs.Parse(args[1:]); e == flag.ErrHelp {
 		fmt.Fprintf(out, "Usage: jev %s [options]\n", args[0])
@@ -94,7 +110,7 @@ func run(ctx context.Context, args []string, in io.Reader, out, diag io.Writer) 
 		fs.PrintDefaults()
 		return 0, nil
 	} else if e != nil || fs.NArg() != 0 {
-		return 2, errInput
+		return 2, invalid("invalid_arguments", "Invalid command arguments; run the command with --help")
 	}
 	switch args[0] {
 	case "schema":
@@ -124,7 +140,7 @@ func run(ctx context.Context, args []string, in io.Reader, out, diag io.Writer) 
 		} else {
 			f, ok := in.(*os.File)
 			if !ok || !term.IsTerminal(int(f.Fd())) {
-				return 2, errInput
+				return 2, invalid("noninteractive_auth", "Use jev auth --stdin when stdin is not a terminal")
 			}
 			fmt.Fprint(diag, "TypeSafe API key: ")
 			data, e = term.ReadPassword(int(f.Fd()))
@@ -141,11 +157,11 @@ func run(ctx context.Context, args []string, in io.Reader, out, diag io.Writer) 
 		return 0, serveMCP(ctx, in, out)
 	}
 	if qpath == "" {
-		return 2, errInput
+		return 2, invalidField("missing_required_option", "The --questions option is required", "questions")
 	}
 	data, e := os.ReadFile(qpath)
 	if e != nil {
-		return 2, e
+		return 2, invalidPath("questions_file_error", "Could not read questions file", qpath)
 	}
 	qs, e := questions(data)
 	if e != nil {
@@ -157,7 +173,7 @@ func run(ctx context.Context, args []string, in io.Reader, out, diag io.Writer) 
 		if input != "-" {
 			f, e := os.Open(input)
 			if e != nil {
-				return 2, e
+				return 2, invalidPath("input_file_error", "Could not read input file", input)
 			}
 			defer f.Close()
 			reader = f
@@ -171,12 +187,18 @@ func run(ctx context.Context, args []string, in io.Reader, out, diag io.Writer) 
 		return 0, emit(out, object{"valid": true, "questions": len(qs), "records": len(rows)})
 	}
 	if input == "" || workers < 1 || workers > 32 || (resume && output == "-") {
-		return 2, errInput
+		if input == "" {
+			return 2, invalidField("missing_required_option", "The --input option is required", "input")
+		}
+		if workers < 1 || workers > 32 {
+			return 2, invalidField("invalid_workers", "Workers must be between 1 and 32", "workers")
+		}
+		return 2, invalidField("invalid_resume_output", "Resume requires a file output", "output")
 	}
 	if output != "-" {
 		for _, p := range []string{qpath, input} {
 			if p != "-" && sameFile(output, p) {
-				return 2, errInput
+				return 2, invalidField("unsafe_output_path", "Output must not overwrite an input file", "output")
 			}
 		}
 	}
@@ -192,7 +214,7 @@ func run(ctx context.Context, args []string, in io.Reader, out, diag io.Writer) 
 					if _, bad := row["error"]; !bad {
 						digest, ok := row["fingerprint"].(string)
 						if !ok || digest == "" {
-							return errInput
+							return invalid("invalid_resume_record", "Successful resume records need a nonempty fingerprint")
 						}
 						completed[digest] = true
 					}
@@ -217,7 +239,7 @@ func run(ctx context.Context, args []string, in io.Reader, out, diag io.Writer) 
 		}
 		f, e := os.OpenFile(output, flags, 0600)
 		if e != nil {
-			return 2, e
+			return 2, invalidPath("output_file_error", "Could not create or open output file", output)
 		}
 		defer f.Close()
 		stream = f

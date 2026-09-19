@@ -122,11 +122,15 @@ func TestMCPStdioTools(t *testing.T) {
 	}
 	result = callTool(t, ctx, session, "evaluate_batch", object{"records": []any{object{"id": "a", "state": "ok"}, object{"id": "b", "state": "fail"}}, "questions": qs}, false)
 	rows := result["results"].([]any)
-	if result["failed"] != json.Number("1") || len(rows) != 2 || rows[0].(object)["id"] != "a" || rows[1].(object)["error"] == nil {
+	if result["failed"] != json.Number("1") || result["status"] != "partial_failure" || len(rows) != 2 || rows[0].(object)["id"] != "a" || rows[1].(object)["error"] == nil {
 		t.Fatal(result)
 	}
 	if rows[0].(object)["fingerprint"] != fingerprint(object{"id": "a", "state": "ok"}, qs, "jev-latest") {
 		t.Fatal("fingerprint changed")
+	}
+	result = callTool(t, ctx, session, "evaluate_batch", object{"records": []any{object{"id": "failed", "state": "fail"}}, "questions": qs}, true)
+	if result["status"] != "failed" || result["failed"] != json.Number("1") {
+		t.Fatal(result)
 	}
 	before := calls.Load()
 	for _, args := range []object{{"state": nil, "questions": qs}, {"state": "secret-input", "questions": object{}}, {"state": "x", "questions": qs, "model": 1}, {"state": "x", "questions": qs, "api_key": "secret-input"}} {

@@ -21,7 +21,7 @@ func loadKey() (string, error) {
 }
 func saveKey(key string) error {
 	if !validKey(key) {
-		return errInput
+		return invalid("invalid_credentials", "API key must be nonempty and contain no whitespace")
 	}
 	path, e := keyPath()
 	if e != nil {

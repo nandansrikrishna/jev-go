@@ -17,6 +17,35 @@ type object = map[string]any
 
 var errInput = errors.New("invalid configuration or input")
 
+// inputError carries only safe, machine-actionable context. It must never
+// contain record contents, question instructions, credentials, or upstream
+// response bodies.
+type inputError struct {
+	Code    string
+	Message string
+	Field   string
+	Path    string
+	Line    int
+}
+
+func (e *inputError) Error() string { return e.Code }
+
+func invalid(code, message string) error {
+	return &inputError{Code: code, Message: message}
+}
+
+func invalidField(code, message, field string) error {
+	return &inputError{Code: code, Message: message, Field: field}
+}
+
+func invalidPath(code, message, path string) error {
+	return &inputError{Code: code, Message: message, Path: path}
+}
+
+func invalidLine(code, message string, line int) error {
+	return &inputError{Code: code, Message: message, Line: line}
+}
+
 func decode(data []byte) (any, error) {
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.UseNumber()
@@ -50,41 +79,41 @@ func nonempty(v any) bool {
 func questions(data []byte) (object, error) {
 	v, err := decode(data)
 	if err != nil {
-		return nil, err
+		return nil, invalid("invalid_questions_json", "Questions file is not one JSON object")
 	}
 	qs, ok := v.(object)
 	if !ok || len(qs) == 0 {
-		return nil, errInput
+		return nil, invalid("invalid_questions", "Questions must be a nonempty object")
 	}
 	for id, raw := range qs {
 		q, ok := raw.(object)
 		if !ok || id == "" || !nonempty(q["instructions"]) {
-			return nil, errInput
+			return nil, invalidField("invalid_question", "Each question needs a nonempty ID and instructions", "questions")
 		}
 		for key := range q {
 			if key != "type" && key != "instructions" && key != "criteria" {
-				return nil, errInput
+				return nil, invalidField("invalid_question", "Question contains an unsupported field", "questions")
 			}
 		}
 		switch q["type"] {
 		case "choice":
 			c, ok := q["criteria"].(object)
 			if !ok || len(c) < 2 {
-				return nil, errInput
+				return nil, invalidField("invalid_question_criteria", "Choice questions need at least two named criteria", "criteria")
 			}
 			for _, v := range c {
 				if v != nil && !content(v) {
-					return nil, errInput
+					return nil, invalidField("invalid_question_criteria", "Choice criteria descriptions must be text, objects, arrays, or null", "criteria")
 				}
 			}
 		case "score":
 			c, ok := q["criteria"].([]any)
 			if !ok || len(c) < 2 {
-				return nil, errInput
+				return nil, invalidField("invalid_question_criteria", "Score questions need at least two ordered criteria", "criteria")
 			}
 			for _, v := range c {
 				if !content(v) {
-					return nil, errInput
+					return nil, invalidField("invalid_question_criteria", "Score criteria must be text, objects, or arrays", "criteria")
 				}
 			}
 		case "noul":
@@ -94,15 +123,15 @@ func questions(data []byte) (object, error) {
 			}
 			c, ok := q["criteria"].(object)
 			if !ok {
-				return nil, errInput
+				return nil, invalidField("invalid_question_criteria", "Noul criteria must be an object", "criteria")
 			}
 			for k, v := range c {
 				if (k != "true" && k != "false") || (v != nil && !content(v)) {
-					return nil, errInput
+					return nil, invalidField("invalid_question_criteria", "Noul criteria may contain only true and false", "criteria")
 				}
 			}
 		default:
-			return nil, errInput
+			return nil, invalidField("invalid_question_type", "Question type must be choice, score, or noul", "type")
 		}
 	}
 	return qs, nil
@@ -110,18 +139,24 @@ func questions(data []byte) (object, error) {
 func readLines(r io.Reader, visit func(object) error) error {
 	// Reader has no Scanner token limit, allowing long document records.
 	b := bufio.NewReader(r)
+	lineNumber := 0
 	for {
 		line, err := b.ReadBytes('\n')
+		lineNumber++
 		if len(bytes.TrimSpace(line)) > 0 {
 			v, e := decode(line)
 			if e != nil {
-				return e
+				return invalidLine("invalid_jsonl", "JSONL line is not one JSON object", lineNumber)
 			}
 			row, ok := v.(object)
 			if !ok {
-				return errInput
+				return invalidLine("invalid_jsonl_record", "JSONL record must be an object", lineNumber)
 			}
 			if e = visit(row); e != nil {
+				var input *inputError
+				if errors.As(e, &input) && input.Line == 0 {
+					input.Line = lineNumber
+				}
 				return e
 			}
 		}
@@ -138,8 +173,14 @@ func records(r io.Reader) ([]object, error) {
 	seen := map[string]bool{}
 	err := readLines(r, func(row object) error {
 		id, ok := row["id"].(string)
-		if !ok || id == "" || seen[id] || !content(row["state"]) {
-			return errInput
+		if !ok || id == "" {
+			return invalid("invalid_record_id", "Record ID must be a nonempty string")
+		}
+		if seen[id] {
+			return invalid("duplicate_record_id", "Record IDs must be unique")
+		}
+		if !content(row["state"]) {
+			return invalid("invalid_record_state", "Record state must be a string, object, or array")
 		}
 		seen[id] = true
 		rows = append(rows, row)

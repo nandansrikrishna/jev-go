@@ -165,10 +165,26 @@ func TestRetriesAndInvalidResponses(t *testing.T) {
 	if r := c.evaluate(context.Background(), "x", qs, "x"); r["error"] != nil || calls.Load() != 3 {
 		t.Fatal(r, calls.Load())
 	}
-	for _, raw := range []string{`{}`, `{"model":"x","usage":{},"answers":{"a":{"type":"noul","noul":"secret"}}}`, `{"model":"x","usage":{},"answers":null}`, `{"model":"x","usage":{"input_tokens":1.5}}`} {
-		if _, ok := response([]byte(raw)); ok {
+	for _, raw := range []string{`{}`, `{"model":"x","usage":{},"answers":{"urgent":{"type":"noul","noul":"secret"}}}`, `{"model":"x","usage":{},"answers":null}`, `{"model":"x","usage":{"input_tokens":1.5}}`, `{"model":"x","usage":{},"answers":{}}`, `{"model":"x","usage":{},"answers":{"urgent":{"type":"unknown"}}}`, `{"model":"x","usage":{},"answers":{"urgent":{"type":"choice","choice":"a","confidence":1,"probabilities":{"a":1}}}}`, `{"model":"x","usage":{},"answers":{"other":{"type":"noul","noul":0.5}}}`} {
+		if _, ok := response([]byte(raw), qs); ok {
 			t.Fatal("accepted invalid response", raw)
 		}
+	}
+}
+
+func TestActionableInputErrors(t *testing.T) {
+	dir := t.TempDir()
+	q := filepath.Join(dir, "questions.json")
+	in := filepath.Join(dir, "input.jsonl")
+	write(t, q, testQuestions)
+	write(t, in, "\n{\"id\":\"a\",\"state\":\"x\"}\n{broken\n")
+	code, _, diag := invoke(t, "validate", "--questions", q, "--input", in)
+	if code != 2 || !strings.Contains(diag, `"code":"invalid_jsonl"`) || !strings.Contains(diag, `"line":3`) || strings.Contains(diag, "broken") {
+		t.Fatal(code, diag)
+	}
+	code, _, diag = invoke(t, "evaluate", "--questions", q)
+	if code != 2 || !strings.Contains(diag, `"code":"missing_required_option"`) || !strings.Contains(diag, `"field":"input"`) {
+		t.Fatal(code, diag)
 	}
 }
 func TestStdinAndMissingCredentials(t *testing.T) {
@@ -211,7 +227,7 @@ func TestWorkerLimitAndChangedResume(t *testing.T) {
 		for old := peak.Load(); n > old && !peak.CompareAndSwap(old, n); old = peak.Load() {
 		}
 		time.Sleep(5 * time.Millisecond)
-		fmt.Fprint(w, `{"model":"x","answers":{},"usage":{}}`)
+		fmt.Fprint(w, `{"model":"x","answers":{"urgent":{"type":"noul","noul":0.5}},"usage":{}}`)
 	}))
 	defer server.Close()
 	qs, _ := questions([]byte(testQuestions))

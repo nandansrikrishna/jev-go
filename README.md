@@ -4,14 +4,14 @@ A standalone Go CLI and MCP server for TypeSafe's Jev model. Every command runs
 in a single binary with no Python dependency. The separate
 [Python integration](https://github.com/nandansrikrishna/jev-agent-tool) remains available.
 
-**Public beta 0.1.0-beta.1.** An independent community integration, not an official
+**Public beta 0.1.0-beta.2.** An independent community integration, not an official
 TypeSafe product. Bring your own [TypeSafe API key](https://console.typesafe.ai/).
 No account with this project, hosted proxy, or shared API key is needed.
 
 ## Install and authenticate
 
 Download a prebuilt archive from the
-[v0.1.0-beta.1 release](https://github.com/nandansrikrishna/jev-go/releases/tag/v0.1.0-beta.1).
+[v0.1.0-beta.2 release](https://github.com/nandansrikrishna/jev-go/releases/tag/v0.1.0-beta.2).
 Choose your OS and architecture, verify it with `SHA256SUMS`, and extract it.
 Every archive contains the binary, license, and [installation instructions](INSTALL.md).
 No Go or Python installation is needed for the binary.
@@ -19,7 +19,7 @@ No Go or Python installation is needed for the binary.
 With Go 1.25 or newer, install the tagged version directly:
 
 ```sh
-go install github.com/nandansrikrishna/jev-go/cmd/jev@v0.1.0-beta.1
+go install github.com/nandansrikrishna/jev-go/cmd/jev@v0.1.0-beta.2
 ```
 
 Or build from this checkout:
@@ -79,6 +79,9 @@ Output preserves the input ID and includes `answers`, `model`, `usage`, and a
 request fingerprint. Failed records contain `error` instead of answers.
 Errors intentionally omit upstream bodies and private input. All JSONL results
 go to the output file or stdout; progress and diagnostics go to stderr.
+Input and configuration errors on stderr include a stable machine-readable
+`code` and, when applicable, a safe `field`, `path`, or JSONL `line` so an agent
+can repair the invocation without inspecting private record contents.
 
 ```sh
 # stdin/stdout pipelines
@@ -114,7 +117,8 @@ no hosted queue or distributed workers. Do not run concurrent writers on one out
 - `evaluate_batch`: evaluate 1–50 `{id, state}` records with per-record results.
 
 Tool results include JSON text and structured content. Batch results preserve
-input order and include per-record errors plus a failure count. Single-record
+input order and include per-record errors, a failure count, and an `ok`,
+`partial_failure`, or `failed` status. An entirely failed batch and single-record
 failures set MCP `isError`; input errors are sanitized to omit private content.
 Cancellation propagates to in-flight HTTP requests. Schema discovery and tool
 listing work without credentials; evaluation reads the normal CLI credentials.

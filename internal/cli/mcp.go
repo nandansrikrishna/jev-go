@@ -131,7 +131,15 @@ func callMCPTool(ctx context.Context, name string, raw json.RawMessage) *mcp.Cal
 	if err != nil {
 		return mcpInputError()
 	}
-	return mcpResult(object{"results": results, "failed": failed}, false)
+	status := "ok"
+	if failed > 0 {
+		status = "partial_failure"
+	}
+	allFailed := len(results) > 0 && failed == len(results)
+	if allFailed {
+		status = "failed"
+	}
+	return mcpResult(object{"results": results, "failed": failed, "status": status}, allFailed)
 }
 
 type nopWriteCloser struct{ io.Writer }

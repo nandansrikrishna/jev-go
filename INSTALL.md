@@ -1,7 +1,7 @@
-# Install Jev Go v0.1.0-beta.1
+# Install Jev Go v0.1.0-beta.2
 
 Download an archive and `SHA256SUMS` from:
-https://github.com/nandansrikrishna/jev-go/releases/tag/v0.1.0-beta.1
+https://github.com/nandansrikrishna/jev-go/releases/tag/v0.1.0-beta.2
 
 | Your computer | Archive suffix |
 | --- | --- |
@@ -22,16 +22,16 @@ Verify the archive against the matching entry in `SHA256SUMS`:
 
 ```sh
 # macOS example:
-shasum -a 256 jev_0.1.0-beta.1_darwin_arm64.tar.gz
+shasum -a 256 jev_0.1.0-beta.2_darwin_arm64.tar.gz
 # Linux example:
-sha256sum jev_0.1.0-beta.1_linux_amd64.tar.gz
+sha256sum jev_0.1.0-beta.2_linux_amd64.tar.gz
 ```
 
 Extract the archive for your machine, then install the binary in a directory
 on your PATH. For example on Apple Silicon:
 
 ```sh
-tar -xzf jev_0.1.0-beta.1_darwin_arm64.tar.gz
+tar -xzf jev_0.1.0-beta.2_darwin_arm64.tar.gz
 mkdir -p "$HOME/.local/bin"
 install -m 755 jev "$HOME/.local/bin/jev"
 export PATH="$HOME/.local/bin:$PATH"
@@ -48,8 +48,8 @@ under Privacy & Security according to your organization's policy.
 Compute the hash and compare it to the matching entry in `SHA256SUMS`:
 
 ```powershell
-Get-FileHash .\jev_0.1.0-beta.1_windows_amd64.zip -Algorithm SHA256
-Expand-Archive .\jev_0.1.0-beta.1_windows_amd64.zip -DestinationPath .\jev
+Get-FileHash .\jev_0.1.0-beta.2_windows_amd64.zip -Algorithm SHA256
+Expand-Archive .\jev_0.1.0-beta.2_windows_amd64.zip -DestinationPath .\jev
 .\jev\jev.exe --version
 ```
 
@@ -98,7 +98,7 @@ No Python package or sibling repository is needed.
 Go 1.25 or newer is required only when building:
 
 ```sh
-go install github.com/nandansrikrishna/jev-go/cmd/jev@v0.1.0-beta.1
+go install github.com/nandansrikrishna/jev-go/cmd/jev@v0.1.0-beta.2
 ```
 
 The executable is installed in GOBIN, or `$(go env GOPATH)/bin` by default.

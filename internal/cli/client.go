@@ -56,7 +56,7 @@ func (c *apiClient) evaluate(ctx context.Context, state any, qs object, model st
 				failure = safeError("TypeSafeAPIConnectionError", 0)
 			} else if res.StatusCode >= 200 && res.StatusCode < 300 {
 				if readErr == nil {
-					if result, ok := response(data); ok {
+					if result, ok := response(data, qs); ok {
 						return result
 					}
 				}
@@ -98,7 +98,7 @@ func retryDelay(h http.Header) (time.Duration, bool) {
 	return 0, false
 }
 func number(v any) bool { _, ok := v.(json.Number); return ok }
-func response(data []byte) (object, bool) {
+func response(data []byte, questions object) (object, bool) {
 	v, e := decode(data)
 	if e != nil {
 		return nil, false
@@ -128,21 +128,22 @@ func response(data []byte) (object, bool) {
 			cleanUsage[k] = n
 		}
 	}
-	answers := object{}
-	if a, exists := raw["answers"]; exists {
-		answers, ok = a.(object)
-		if !ok {
-			return nil, false
-		}
+	answers, ok := raw["answers"].(object)
+	if !ok || len(answers) != len(questions) {
+		return nil, false
 	}
 	clean := object{}
 	for id, v := range answers {
+		question, exists := questions[id].(object)
+		if !exists {
+			return nil, false
+		}
 		a, ok := v.(object)
 		if !ok {
 			return nil, false
 		}
 		kind, ok := a["type"].(string)
-		if !ok {
+		if !ok || kind != question["type"] {
 			return nil, false
 		}
 		out := object{"type": kind}
@@ -173,10 +174,15 @@ func response(data []byte) (object, bool) {
 			}
 			out["probabilities"] = probs
 			if kind == "choice" {
-				if _, ok := a["choice"].(string); !ok {
+				choice, ok := a["choice"].(string)
+				criteria, criteriaOK := question["criteria"].(object)
+				if !ok || !criteriaOK {
 					return nil, false
 				}
-				out["choice"] = a["choice"]
+				if _, exists := criteria[choice]; !exists {
+					return nil, false
+				}
+				out["choice"] = choice
 			} else {
 				if !number(a["score"]) {
 					return nil, false
@@ -194,9 +200,14 @@ func response(data []byte) (object, bool) {
 				out["legend"] = legend
 			}
 		default:
-			continue
+			return nil, false
 		}
 		clean[id] = out
+	}
+	for id := range questions {
+		if _, exists := clean[id]; !exists {
+			return nil, false
+		}
 	}
 	return object{"model": model, "usage": cleanUsage, "answers": clean}, true
 }
@@ -212,7 +223,7 @@ func newAPIClient() (*apiClient, error) {
 	}
 	u, e := url.Parse(base)
 	if e != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return nil, errInput
+		return nil, invalidField("invalid_base_url", "TYPESAFE_BASE_URL must be an HTTP or HTTPS origin without credentials, query, or fragment", "TYPESAFE_BASE_URL")
 	}
 	client := &apiClient{key: key, base: base, http: &http.Client{Timeout: 60 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	return client, nil
